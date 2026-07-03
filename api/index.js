@@ -151,7 +151,7 @@ bot.on('text', async (ctx) => {
   }
 });
 
-module.exports.default = async function handler(req, res) {
+module.exports = async function handler(req, res) {
   await initDB().catch(console.error);
   
   if (req.method === 'POST') {
@@ -161,5 +161,3 @@ module.exports.default = async function handler(req, res) {
     res.status(200).send('Thoughts Reflector bot is running');
   }
 };
-
-module.exports = handler;
