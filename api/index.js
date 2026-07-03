@@ -1,4 +1,3 @@
-require('dotenv').config();
 const axios = require('axios');
 const { Telegraf } = require('telegraf');
 const { initDB, saveMessage, getMessages, clearMessages, getUser, upsertUser, updateUserSummary } = require('../src/db');
@@ -152,13 +151,15 @@ bot.on('text', async (ctx) => {
   }
 });
 
-module.exports = async function handler(req, res) {
+module.exports.default = async function handler(req, res) {
   await initDB().catch(console.error);
   
   if (req.method === 'POST') {
     await bot.handleUpdate(req.body);
-    res.status(200).send('OK');
+    res.status(200).end('OK');
   } else {
     res.status(200).send('Thoughts Reflector bot is running');
   }
 };
+
+module.exports = handler;
