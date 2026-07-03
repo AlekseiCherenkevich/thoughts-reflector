@@ -2,7 +2,7 @@ require('dotenv').config();
 const axios = require('axios');
 const { Telegraf } = require('telegraf');
 const express = require('express');
-const { initDB, saveMessage, getMessages, clearMessages, getUser, upsertUser, updateUserSummary, getMessagesCount } = require('./db');
+const { initDB, saveMessage, getMessages, clearMessages, getUser, upsertUser, updateUserSummary } = require('./db');
 const { callLLM } = require('./llm');
 const { SYSTEM_PROMPT, PERSPECTIVES_PROMPT, RECAP_PROMPT, NEW_CHAT_PROMPT } = require('./prompts');
 
@@ -168,7 +168,11 @@ app.post('/webhook/telegram', (req, res) => {
 
 app.get('/', (req, res) => res.send('Thoughts Reflector bot is running'));
 
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-  console.log(`Webhook URL: https://your-domain.com/webhook/telegram`);
-});
+if (process.env.NODE_ENV !== 'production' && process.env.TELEGRAM_BOT_TOKEN) {
+  app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+    console.log(`Webhook URL: https://your-domain.com/webhook/telegram`);
+  });
+}
+
+module.exports = { app, bot };
