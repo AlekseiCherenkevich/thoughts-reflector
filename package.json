@@ -1,0 +1,18 @@
+{
+  "name": "thoughts-reflector",
+  "version": "0.1.0",
+  "description": "Telegram bot — AI companion for mental health",
+  "main": "src/bot.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node src/bot.js",
+    "dev": "node src/bot.js"
+  },
+  "dependencies": {
+    "telegraf": "^4.12.3",
+    "pg": "^8.11.3",
+    "axios": "^1.6.7",
+    "express": "^4.18.2",
+    "dotenv": "^16.4.5"
+  }
+}
