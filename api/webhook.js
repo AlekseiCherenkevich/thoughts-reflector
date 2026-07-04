@@ -1,3 +1,4 @@
+require('dotenv').config();
 const axios = require('axios');
 const { Telegraf } = require('telegraf');
 const { initDB, saveMessage, getMessages, clearMessages, getUser, upsertUser, updateUserSummary } = require('../src/db');
@@ -11,12 +12,8 @@ let lastUpdateId = 0;
 const bot = new Telegraf(process.env.TELEGRAM_BOT_TOKEN);
 
 bot.use((ctx, next) => {
-  if (ctx.update?.update_id && ctx.update.update_id <= lastUpdateId) {
-    return;
-  }
-  if (ctx.update?.update_id) {
-    lastUpdateId = ctx.update.update_id;
-  }
+  if (ctx.update?.update_id && ctx.update.update_id <= lastUpdateId) return;
+  if (ctx.update?.update_id) lastUpdateId = ctx.update.update_id;
   return next();
 });
 
@@ -29,9 +26,7 @@ bot.start(async (ctx) => {
   await upsertUser(ctx.from.id, ctx.from.username);
 });
 
-bot.help((ctx) => {
-  return ctx.reply(`Команды:\n/start — начать/перезагрузить\n/help — справка\n/clear — очистить историю\n/recap — краткий итог разговора\n/perspectives — анализ с 6 подходов\n/connect — подключить свой API key (Groq/HF)`);
-});
+bot.help((ctx) => ctx.reply(`Команды:\n/start — начать/перезагрузить\n/help — справка\n/clear — очистить историю\n/recap — краткий итог разговора\n/perspectives — анализ с 6 подходов\n/connect — подключить свой API key (Groq/HF)`));
 
 bot.command('clear', async (ctx) => {
   await clearMessages(ctx.chat.id);
@@ -41,18 +36,9 @@ bot.command('clear', async (ctx) => {
 
 bot.command('recap', async (ctx) => {
   const messages = await getMessages(ctx.chat.id, 100);
-  if (messages.length === 0) {
-    return ctx.reply('История пуста.');
-  }
-
-  const history = messages.map(m => `${m.role}: ${m.content}`).join('\n\n');
-  const recapMessages = [
-    { role: 'system', content: RECAP_PROMPT },
-    { role: 'user', content: history }
-  ];
-
+  if (messages.length === 0) return ctx.reply('История пуста.');
   try {
-    const recap = await callLLM(recapMessages);
+    const recap = await callLLM([{ role: 'system', content: RECAP_PROMPT }, { role: 'user', content: messages.map(m => `${m.role}: ${m.content}`).join('\n\n') }]);
     await updateUserSummary(ctx.from.id, recap);
     await ctx.reply(`Краткий итог:\n\n${recap}`);
   } catch (error) {
@@ -63,20 +49,11 @@ bot.command('recap', async (ctx) => {
 
 bot.command('perspectives', async (ctx) => {
   const messages = await getMessages(ctx.chat.id, 50);
-  if (messages.length === 0) {
-    return ctx.reply('Сначала нужно поговорить хотя бы о чём-то.');
-  }
-
+  if (messages.length === 0) return ctx.reply('Сначала нужно поговорить хотя бы о чём-то.');
   const userName = ctx.from?.username || ctx.from?.first_name || 'пользователь';
   const userQuery = `Проблема пользователя @${userName}: ${messages.map(m => m.content).join(' ').slice(0, 500)}`;
-  
-  const perspectiveMessages = [
-    { role: 'system', content: PERSPECTIVES_PROMPT },
-    { role: 'user', content: userQuery }
-  ];
-
   try {
-    const result = await callLLM(perspectiveMessages);
+    const result = await callLLM([{ role: 'system', content: PERSPECTIVES_PROMPT }, { role: 'user', content: userQuery }]);
     await ctx.reply(result);
   } catch (error) {
     console.error('Perspectives error:', error);
@@ -84,66 +61,38 @@ bot.command('perspectives', async (ctx) => {
   }
 });
 
-bot.command('connect', async (ctx) => {
-  await ctx.reply('Команда /connect будет реализована на Этапе 4. Скоро.');
-});
+bot.command('connect', async (ctx) => ctx.reply('Команда /connect будет реализована на Этапе 4. Скоро.'));
 
 bot.on('text', async (ctx) => {
   const chatId = ctx.chat.id;
   const telegramId = ctx.from.id;
-  const text = ctx.message.text;
-
   try {
-    const check = await axios.post(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/getChat`, {
-      chat_id: chatId
-    });
-    
-    if (!check.data.ok) {
-      console.log(`Ghost user detected: ${telegramId}`);
-      return;
-    }
-  } catch {
-    return;
-  }
+    const check = await axios.post(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/getChat`, { chat_id: chatId });
+    if (!check.data.ok) return;
+  } catch { return; }
 
   await upsertUser(telegramId, ctx.from?.username, true);
-  await saveMessage(chatId, 'user', text);
+  await saveMessage(chatId, 'user', ctx.message.text);
 
   const messages = await getMessages(chatId, 15);
   const contextSize = messages.length * TOKENS_PER_MESSAGE;
-  
   let warning = null;
+  
   if (contextSize > MODEL_CONTEXT_LIMIT * 0.8 && contextSize <= MODEL_CONTEXT_LIMIT * 0.95) {
     warning = '⚠️ Контекст почти заполнен. Используйте /recap для очистки.';
   } else if (contextSize > MODEL_CONTEXT_LIMIT * 0.95) {
     warning = '🚨 Контекст почти исчерпан. Автоматический /recap...';
     const allMessages = await getMessages(chatId, 100);
-    const recapMessages = [
-      { role: 'system', content: RECAP_PROMPT },
-      { role: 'user', content: allMessages.map(m => `${m.role}: ${m.content}`).join('\n\n') }
-    ];
     try {
-      const recap = await callLLM(recapMessages);
+      const recap = await callLLM([{ role: 'system', content: RECAP_PROMPT }, { role: 'user', content: allMessages.map(m => `${m.role}: ${m.content}`).join('\n\n') }]);
       await updateUserSummary(telegramId, recap);
-    } catch (e) {
-      console.error('Auto recap error:', e);
-    }
+    } catch (e) { console.error('Auto recap error:', e); }
   }
 
-  const llmMessages = [
-    { role: 'system', content: SYSTEM_PROMPT },
-    ...messages.map(m => ({ role: m.role, content: m.content }))
-  ];
-
   try {
-    const response = await callLLM(llmMessages);
+    const response = await callLLM([{ role: 'system', content: SYSTEM_PROMPT }, ...messages.map(m => ({ role: m.role, content: m.content }))]);
     await saveMessage(chatId, 'assistant', response);
-    
-    if (warning) {
-      await ctx.reply(`${response}\n\n${warning}`);
-    } else {
-      await ctx.reply(response);
-    }
+    await ctx.reply(warning ? `${response}\n\n${warning}` : response);
   } catch (error) {
     console.error('LLM error:', error);
     await ctx.reply('Извините, сейчас я не могу ответить. Попробуйте позже.');
@@ -157,7 +106,6 @@ module.exports = async function handler(req, res) {
     await initDB().catch(console.error);
     dbInitialized = true;
   }
-  
   if (req.method === 'POST') {
     await bot.handleUpdate(req.body);
     res.status(200).end('OK');
