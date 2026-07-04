@@ -25,7 +25,6 @@ bot.start(async (ctx) => {
   const welcomeMessage = user?.summary 
     ? `${NEW_CHAT_PROMPT(user.summary)}\n\nНапиши о том, что на душе.`
     : `Привет. Я — Thoughts Reflector, AI-компаньон по ментальному здоровью.\n\nЯ задаю вопросы, помогая глубже понять мысли и эмоции. Никаких советов — только рефлексия.\n\nКоманды:\n/help — справка\n/clear — очистить историю\n/recap — краткий итог разговора\n/perspectives — анализ с 6 подходов\n/connect — подключить свой API key`;
-  
   await ctx.reply(welcomeMessage);
   await upsertUser(ctx.from.id, ctx.from.username);
 });
